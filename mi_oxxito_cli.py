@@ -13,7 +13,6 @@ DATABASE = 'mi_oxxito'
 def main():
   connection = conect_sql()
   lider_id = login(connection=connection)
-  _selecionar_juego(connection=connection, lider_id=lider_id)
   while True:
     menu = menu_principal()
     match menu:
@@ -24,7 +23,7 @@ def main():
       case '3':
         iniciar_juego(connection=connection, lider_id=lider_id)
       case '4':
-        estatus_partidas_activas(connection=connection , lider_id=lider_id)
+        show_partidas_activas(_estatus_partidas(connection=connection , lider_id=lider_id))
       case 'E':
         break
       case _:
@@ -148,7 +147,24 @@ def iniciar_juego(connection: Connection, lider_id: int):  # Verifica que el cre
 
   print(f'Primer jugador en turno es ID: {primer_jugador}')
 
-def estatus_partidas_activas(connection: Connection, lider_id: int):
+def show_partidas_activas(estatus_partidas: dict):
+  for key, value in estatus_partidas.items():
+    if key == 'Turno':
+      for juego_id in value:
+        print(f'ID: {juego_id}\t¡Es tu turno!')
+    elif key == 'No turno':
+      for juego_id in value:
+        print(f'ID: {juego_id}\tAun no es tu turno')
+    elif key == 'No iniciado mios':
+      for juego_id in value:
+        print(f'ID: {juego_id}\tNo has empezado el juego.')
+    elif key == 'No iniciado otros':
+      for juego in value:
+        print(f'ID: {juego['juego_id']}\tEl jugador {juego['creador']}, no ha empezado el juego.')
+  print('\n\n')
+
+
+def _estatus_partidas(connection: Connection, lider_id: int):
   select_estatus = text("""
   select j2.juego_id, j2.jugador_en_turno, j.jugador_id, j2.creador, j2.ganador
   from lideres l 
@@ -157,24 +173,38 @@ def estatus_partidas_activas(connection: Connection, lider_id: int):
   where l.lider_id = :lider_id 
   """)
   estatus_df = pd.read_sql(select_estatus, connection, params={'lider_id': lider_id})
-
-  print('\n\n')
+  estatus_partidas = {
+    'Turno': [], 
+    'No turno': [], 
+    'No iniciado mios': [], 
+    'No iniciado otros': [], 
+    'Terminado': []
+    }
+  
   for i, row in estatus_df.iterrows():
     if row['ganador'] is not None:
-      pass
+      estatus_partidas['Terminado'].append(row['juego_id'])
     elif row['jugador_en_turno'] == row['jugador_id']:
-      print(f'ID: {row['juego_id']}\t¡Es tu turno!')
+      estatus_partidas['Turno'].append(row['juego_id'])
     elif row['jugador_en_turno'] == row['jugador_id'] and row['jugador_en_turno'] is not None:
-      print(f'ID: {row['juego_id']}\tAun no es tu turno')  # Se deberia de poner el id del lider en turno
+      estatus_partidas['No turno'].append(row['juego_id'])  # Se deberia de poner el id del lider en turno
     elif row['jugador_en_turno'] is None and row['jugador_id'] == row['creador']:
-      print(f'ID: {row['juego_id']}\t No has empezado el juego.')
+      estatus_partidas['No iniciado mios'].append(row['juego_id'])
     elif row['jugador_en_turno'] is None and not (row['jugador_id'] == row['creador']):
-      print(f'ID: {row['juego_id']}\t El jugador {row['creador']}, no ha empezado el juego.')
-    
-def jugar(connection: Connection, lider_id: int):
+      estatus_partidas['No iniciado otros'].append({'juego_id': row['juego_id'], 'creador': row['creador']})
+  return estatus_partidas
+
+
+def jugar_turno(connection: Connection, lider_id: int): # Una partida de practica podria ser un turno.
   juego_id = _selecionar_juego(connection=connection, lider_id=lider_id)
-  
-  _siguiente_turno(connection=connection, juego_id=juego_id)
+  # Se le asigna una pregunta al juego, jugador_en_turno, y 
+  # se le da la oportunidad de responderla mediante 4 opciones, se revisa si esta bien o no, 
+  # si esta bien se le dan puntos x multiplicador, aumenta multipliador y se revisa si la partida se ha terminado, si no se ha terminado se responde otra, 
+  # si esta mal la pregunta, turno al siguiente jugador.
+
+def terminar_juego():
+  # Se asigna como ganador, el jugador en turno que desencadena la funcion.
+  pass
 
 def _siguiente_turno(connection: Connection, juego_id: int) -> int: # Funcion auxiliar para cuando se termina de jugar una ronda.
   select_turno = text("SELECT jugador_en_turno FROM juegos WHERE juego_id = :juego_id")
