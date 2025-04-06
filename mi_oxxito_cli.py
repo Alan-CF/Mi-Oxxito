@@ -183,15 +183,19 @@ def _siguiente_turno(connection: Connection, juego_id: int): # Funcion auxiliar 
   if turno_data[0] is None:
     print("El juego no ha empezado.")
     return
-  turno_actual = turno_data[0]
+  jugador_en_turno_actual = turno_data[0]
 
   select_jugadores = text("SELECT jugador_id, turno FROM jugadores WHERE juego_id = :juego_id ORDER BY turno ASC")
   jugadores_result = connection.execute(select_jugadores, {'juego_id': juego_id})
   jugadores_data = jugadores_result.all()
 
-  for i, (_, turno) in enumerate(jugadores_data):
-    if turno == turno_actual:
+  for i, (jugador_id, _) in enumerate(jugadores_data):
+
+    if jugador_id == jugador_en_turno_actual:
       siguiente_idx = i + 1
+
+  if siguiente_idx >= len(jugadores_data):
+    siguiente_idx = 0
 
   siguiente_jugador_id = jugadores_data[siguiente_idx][0]
 
