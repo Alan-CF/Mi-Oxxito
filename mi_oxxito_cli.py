@@ -13,7 +13,7 @@ DATABASE = 'mi_oxxito'
 def main():
   connection = conect_sql()
   lider_id = login(connection=connection)
-  _siguiente_turno(connection=connection, juego_id=1)  # Probando la funcion auxiliar, no funciona.
+  _selecionar_juego(connection=connection, lider_id=lider_id)
   while True:
     menu = menu_principal()
     match menu:
@@ -171,8 +171,12 @@ def estatus_partidas_activas(connection: Connection, lider_id: int):
     elif row['jugador_en_turno'] is None and not (row['jugador_id'] == row['creador']):
       print(f'ID: {row['juego_id']}\t El jugador {row['creador']}, no ha empezado el juego.')
     
-    
-def _siguiente_turno(connection: Connection, juego_id: int): # Funcion auxiliar para cuando se termina de jugar una ronda.
+def jugar(connection: Connection, lider_id: int):
+  juego_id = _selecionar_juego(connection=connection, lider_id=lider_id)
+  
+  _siguiente_turno(connection=connection, juego_id=juego_id)
+
+def _siguiente_turno(connection: Connection, juego_id: int) -> int: # Funcion auxiliar para cuando se termina de jugar una ronda.
   select_turno = text("SELECT jugador_en_turno FROM juegos WHERE juego_id = :juego_id")
   turno_result = connection.execute(select_turno, {'juego_id': juego_id})
   turno_data = turno_result.first()
@@ -205,8 +209,27 @@ def _siguiente_turno(connection: Connection, juego_id: int): # Funcion auxiliar 
 
   print(f'El siguiente jugador en turno es: {siguiente_jugador_id}')
   
-  pass
+def _selecionar_juego(connection: Connection, lider_id: int):
+  select_juego = text("SELECT juego_id FROM juegos WHERE jugador_en_turno = (select jugador_id from jugadores where lider_id = :lider_id)")
+  juego_result = connection.execute(select_juego, {'lider_id': lider_id})
+  juego_ids = [juego_id[0] for juego_id in juego_result.all()]
+
+  print("\n\nSeleciona el juego en el que quieres jugar:")
+  if juego_ids is not None:
+    for juego_id in juego_ids: print(f'ID: {juego_id}')
+  else:
+    print("No es tu turno en ningun juego.")
+    return
+  
+  juego_id = int(input("ID: "))
+  if juego_id in juego_ids:
+    print(f'Juego seleccionado: {juego_id}')
+    return juego_id
+  else:
+    print("ID invalido.")
+    return
     
+
 
 if __name__ == "__main__":
   main()
