@@ -24,6 +24,8 @@ def main():
         iniciar_juego(connection=connection, lider_id=lider_id)
       case '4':
         show_partidas_activas(_estatus_partidas(connection=connection , lider_id=lider_id))
+      case '5':
+        jugar_turno(connection=connection, lider_id=lider_id)
       case 'E':
         break
       case _:
@@ -197,14 +199,61 @@ def _estatus_partidas(connection: Connection, lider_id: int):
 
 def jugar_turno(connection: Connection, lider_id: int): # Una partida de practica podria ser un turno.
   juego_id = _selecionar_juego(connection=connection, lider_id=lider_id)
-  # Se le asigna una pregunta al juego, jugador_en_turno, y 
-  # se le da la oportunidad de responderla mediante 4 opciones, se revisa si esta bien o no, 
+
+  jugador_select = text("select jugador_id from lideres l join jugadores j on j.lider_id = l.lider_id where j.juego_id = :juego_id and l.lider_id = :lider_id")
+  jugador_result = connection.execute(jugador_select, {'juego_id': juego_id, 'lider_id': lider_id})
+  jugador_id = jugador_result.first()[0]
+
+  pregunta_correcta = True
+  while pregunta_correcta: # Futura implementacion dificultad
+    preguntas_select = text("select pregunta_id, pregunta, justificacion, opcion_correcta, opcion_2, opcion_3, opcion_4 from preguntas where pregunta_id not in ( select pregunta_id  from pregunta_jugador p where jugador_id = :jugador_id )")
+    preguntas_result = connection.execute(preguntas_select, {'jugador_id': jugador_id})
+    preguntas_disponibles = [list(pregunta) for pregunta in preguntas_result.all()]
+
+    pregunta_completa = random.choice(preguntas_disponibles)
+    opciones = pregunta_completa[3:]
+    random.shuffle(opciones)
+
+    print(pregunta_completa[1])
+    for i, opcion in enumerate(opciones): print(f'{i+1}. {opcion}')
+    respuesta = int(input('Respuesta: '))
+
+    if respuesta == opciones.index(pregunta_completa[3]) + 1:
+      print('Correcto!')
+      _puntos_jugador(connection=connection, jugador_id=jugador_id)
+    else:
+      print('Incorrecto!')
+      pregunta_correcta = False
+    
+    pregunta_quemada_insert = text("insert into pregunta_jugador (jugador_id, pregunta_id) values (:jugador_id, :pregunta_id)")
+    connection.execute(pregunta_quemada_insert, {'jugador_id': jugador_id, 'pregunta_id': pregunta_completa[0]})
+    connection.commit()
+
+  if _estado_victoria(connection=connection, juego_id=juego_id):
+    _terminar_juego(connection=connection, juego_id=juego_id)
+  else:
+    
+    _siguiente_turno(connection=connection, juego_id=juego_id)
+  # Se le asigna una pregunta al juego, jugador_en_turno, y      Hecho
+  # se le da la oportunidad de responderla mediante 4 opciones, se revisa si esta bien o no,     Hecho
   # si esta bien se le dan puntos x multiplicador, aumenta multipliador y se revisa si la partida se ha terminado, si no se ha terminado se responde otra, 
   # si esta mal la pregunta, turno al siguiente jugador.
 
-def terminar_juego():
+
+def _puntos_jugador(connection: Connection, jugador_id: int):
+  # Asignarle puntos al jugador en turno.
+  pass
+
+
+def _estado_victoria(connection: Connection, juego_id: int) -> bool:
+  # Revisar si el jugador en turno ha ganado.
+  pass
+
+
+def _terminar_juego(connection: Connection, juego_id: int):
   # Se asigna como ganador, el jugador en turno que desencadena la funcion.
   pass
+
 
 def _siguiente_turno(connection: Connection, juego_id: int) -> int: # Funcion auxiliar para cuando se termina de jugar una ronda.
   select_turno = text("SELECT jugador_en_turno FROM juegos WHERE juego_id = :juego_id")
