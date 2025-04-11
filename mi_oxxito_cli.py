@@ -206,33 +206,56 @@ def jugar_turno(connection: Connection, lider_id: int): # Una partida de practic
 
   pregunta_correcta = True
   while pregunta_correcta: # Futura implementacion dificultad
-    preguntas_select = text("select pregunta_id, pregunta, justificacion, opcion_correcta, opcion_2, opcion_3, opcion_4 from preguntas where pregunta_id not in ( select pregunta_id  from pregunta_jugador p where jugador_id = :jugador_id )")
+    preguntas_select = text("""
+      select 
+      p.pregunta_id, 
+      p.pregunta, 
+      p.justificacion, 
+      p.opcion_correcta, 
+      p.opcion_2, 
+      p.opcion_3, 
+      p.opcion_4,
+      c.categoria,
+      n.nombre as nivel,
+      n.puntos,
+      n.tiempo
+      from preguntas p
+      join nivelespreguntas n on p.nivel_id = n.nivel_id
+      join categoriaspreguntas c on c.categoria_id = p.categoria_id
+      where pregunta_id not in ( 
+        select pregunta_id  
+        from pregunta_jugador p 
+        where jugador_id = 1
+      )
+      """) # Implementar Categorias
     preguntas_result = connection.execute(preguntas_select, {'jugador_id': jugador_id})
     preguntas_disponibles = [list(pregunta) for pregunta in preguntas_result.all()]
 
     pregunta_completa = random.choice(preguntas_disponibles)
-    opciones = pregunta_completa[3:]
+    opciones = pregunta_completa[3:7]
     random.shuffle(opciones)
 
     print(pregunta_completa[1])
+    print(f'Tienes: {pregunta_completa[10]} segundos')
     for i, opcion in enumerate(opciones): print(f'{i+1}. {opcion}')
     respuesta = int(input('Respuesta: '))
 
     if respuesta == opciones.index(pregunta_completa[3]) + 1:
-      print('Correcto!')
-      _puntos_jugador(connection=connection, jugador_id=jugador_id)
+      _actualizar_puntos_jugador(connection=connection, jugador_id=jugador_id, puntos_pregunta=pregunta_completa[9])
+      _actualizar_multiplicador(connection=connection, jugador_id=jugador_id)
     else:
       print('Incorrecto!')
+      print(f'La respuesta correcta es: {pregunta_completa[3]}')
+      print(pregunta_completa[2])
       pregunta_correcta = False
     
-    pregunta_quemada_insert = text("insert into pregunta_jugador (jugador_id, pregunta_id) values (:jugador_id, :pregunta_id)")
-    connection.execute(pregunta_quemada_insert, {'jugador_id': jugador_id, 'pregunta_id': pregunta_completa[0]})
+    pregunta_quemada_insert = text("insert into pregunta_jugador (jugador_id, pregunta_id, correcta) values (:jugador_id, :pregunta_id, :correcta)")
+    connection.execute(pregunta_quemada_insert, {'jugador_id': jugador_id, 'pregunta_id': pregunta_completa[0], 'correcta': pregunta_correcta})
     connection.commit()
 
   if _estado_victoria(connection=connection, juego_id=juego_id):
     _terminar_juego(connection=connection, juego_id=juego_id)
   else:
-    
     _siguiente_turno(connection=connection, juego_id=juego_id)
   # Se le asigna una pregunta al juego, jugador_en_turno, y      Hecho
   # se le da la oportunidad de responderla mediante 4 opciones, se revisa si esta bien o no,     Hecho
@@ -240,10 +263,26 @@ def jugar_turno(connection: Connection, lider_id: int): # Una partida de practic
   # si esta mal la pregunta, turno al siguiente jugador.
 
 
-def _puntos_jugador(connection: Connection, jugador_id: int):
-  # Asignarle puntos al jugador en turno.
-  pass
+def _actualizar_puntos_jugador(connection: Connection, jugador_id: int, puntos_pregunta: int):
+  select_puntos = text("select puntos_actuales, multiplicador from jugadores where jugador_id = :jugador_id")
+  puntos_result = connection.execute(select_puntos, {'jugador_id': jugador_id})
+  puntos_data = puntos_result.first()
+  puntos = puntos_data[0]
+  multiplicador = puntos_data[1]
+  print(f'Correcto! Ganaste: {puntos_pregunta * multiplicador} puntos')
+  puntos_nuevos = puntos + (multiplicador * puntos_pregunta)
+  update_puntos = text("update jugadores set puntos_actuales = :puntos_nuevos where jugador_id = :jugador_id")
+  connection.execute(update_puntos, {'puntos_nuevos': puntos_nuevos, 'jugador_id': jugador_id})
+  connection.commit()
 
+def _actualizar_multiplicador(connection: Connection, jugador_id: int, aumento: int = 0.2):
+  select_multiplicador = text("select multiplicador from jugadores where jugador_id = :jugador_id")
+  multiplicador_result = connection.execute(select_multiplicador, {'jugador_id': jugador_id})
+  multiplicador = multiplicador_result.first()[0]
+  multiplicador_nuevo = multiplicador + aumento
+  update_multiplicador = text("update jugadores set multiplicador = :multiplicador_nuevo where jugador_id = :jugador_id")
+  connection.execute(update_multiplicador, {'multiplicador_nuevo': multiplicador_nuevo, 'jugador_id': jugador_id})
+  connection.commit()
 
 def _estado_victoria(connection: Connection, juego_id: int) -> bool:
   # Revisar si el jugador en turno ha ganado.
